@@ -11,6 +11,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { auth } from '../firebase';
 import { User } from 'firebase/auth';
 import { initializeVocabulary, getUserData, fetchWordsForStudy, updateUserData, subscribeToUserData, addCoinsToUser } from '../services/db';
+import { setGlobalAccentType } from '../utils/audio';
 
 export function MainApp({ user }: { user: User }) {
   const [activeTab, setActiveTab] = useState<TabType>('study');
@@ -19,6 +20,7 @@ export function MainApp({ user }: { user: User }) {
   const [showDressUp, setShowDressUp] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [coins, setCoins] = useState(0);
+  const [accent, setAccent] = useState<'us' | 'uk'>('us');
   
   const [userId, setUserId] = useState<string | null>(null);
   const [currentBook, setCurrentBook] = useState<string>('CET6');
@@ -45,6 +47,10 @@ export function MainApp({ user }: { user: User }) {
           setPurchasedOutfits(['none']);
         }
         if (userData?.currentBook) setCurrentBook(userData.currentBook);
+        if (userData?.accent) {
+          setAccent(userData.accent);
+          setGlobalAccentType(userData.accent === 'uk' ? 1 : 2);
+        }
 
         // Start listening to user document updates in real-time
         unsubscribeUser = subscribeToUserData(uid, (data) => {
@@ -53,6 +59,10 @@ export function MainApp({ user }: { user: User }) {
             if (data.petOutfit) setOutfit(data.petOutfit);
             if (data.purchasedOutfits) setPurchasedOutfits(data.purchasedOutfits);
             if (data.currentBook) setCurrentBook(data.currentBook);
+            if (data.accent) {
+              setAccent(data.accent);
+              setGlobalAccentType(data.accent === 'uk' ? 1 : 2);
+            }
           }
         });
         
@@ -92,6 +102,12 @@ export function MainApp({ user }: { user: User }) {
   const handleOutfitChange = (newOutfit: PetOutfit) => {
     setOutfit(newOutfit);
     if (userId) updateUserData(userId, { petOutfit: newOutfit });
+  };
+
+  const handleAccentChange = (newAccent: 'us' | 'uk') => {
+    setAccent(newAccent);
+    setGlobalAccentType(newAccent === 'uk' ? 1 : 2);
+    if (userId) updateUserData(userId, { accent: newAccent });
   };
 
   const handlePurchaseOutfit = (newOutfit: PetOutfit, cost: number) => {
@@ -221,7 +237,13 @@ export function MainApp({ user }: { user: User }) {
         purchasedOutfits={purchasedOutfits}
         onPurchaseOutfit={handlePurchaseOutfit}
       />
-      <UserProfileModal isOpen={showProfile} onClose={() => setShowProfile(false)} email={user.email} />
+      <UserProfileModal 
+        isOpen={showProfile} 
+        onClose={() => setShowProfile(false)} 
+        email={user.email} 
+        accent={accent}
+        onChangeAccent={handleAccentChange}
+      />
     </div>
   );
 }

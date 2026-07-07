@@ -19,6 +19,7 @@ interface ReviewTabProps {
 export function ReviewTab({ outfit, onOpenDressUp, onAddCoins, words, userId, onWordReviewed }: ReviewTabProps) {
   const [queue, setQueue] = useState<Word[]>([]);
   const [showDefinition, setShowDefinition] = useState(false);
+  const [idleTime, setIdleTime] = useState(0);
   const [isGeneratingInfo, setIsGeneratingInfo] = useState(false);
   const [isEnrichingCurrentWord, setIsEnrichingCurrentWord] = useState(false);
   const [studyMode, setStudyMode] = useState<'flashcard' | 'choice' | 'spelling'>('flashcard');
@@ -97,6 +98,15 @@ export function ReviewTab({ outfit, onOpenDressUp, onAddCoins, words, userId, on
   }, [currentWord?.id, showDefinition, currentWord?.isPending]);
 
   useEffect(() => {
+    const timer = setInterval(() => {
+      setIdleTime(prev => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const resetIdle = () => setIdleTime(0);
+
+  useEffect(() => {
     if (studyMode === 'choice' && currentWord && words.length > 0) {
       const allOtherDefs = Array.from(new Set(words.filter(w => w.id !== currentWord.id && w.definition !== currentWord.definition).map(w => w.definition)));
       const shuffledOthers = [...allOtherDefs].sort(() => Math.random() - 0.5);
@@ -137,6 +147,7 @@ export function ReviewTab({ outfit, onOpenDressUp, onAddCoins, words, userId, on
     e.stopPropagation();
     if (!currentWord || isGeneratingInfo) return;
     setIsGeneratingInfo(true);
+    resetIdle();
     
     try {
       const res = await fetch('/api/generate-example', {
@@ -162,7 +173,7 @@ export function ReviewTab({ outfit, onOpenDressUp, onAddCoins, words, userId, on
   };
 
   const handleAction = async (action: 'forgot' | 'vague' | 'know') => {
-    
+    resetIdle();
     
     if (userId && currentWord) {
       const prevFam = currentWord.progress?.familiarity || 0;
@@ -189,7 +200,7 @@ export function ReviewTab({ outfit, onOpenDressUp, onAddCoins, words, userId, on
   if (!currentWord) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-slate-500 font-medium">今天的新词已经学完啦！</p>
+        <p className="text-slate-500 font-medium">今天的复习词汇已经复习完啦！</p>
       </div>
     );
   }
@@ -201,11 +212,11 @@ export function ReviewTab({ outfit, onOpenDressUp, onAddCoins, words, userId, on
       exit={{ opacity: 0, y: -10 }}
       transition={{ duration: 0.3 }}
       className="flex flex-col h-full px-6"
-      
+      onClick={resetIdle}
     >
       <div className="flex items-center justify-between mb-2 mt-4">
         <div className="flex items-center space-x-3">
-          <h2 className="text-2xl font-bold text-slate-800 tracking-tight">今日新词</h2>
+          <h2 className="text-2xl font-bold text-slate-800 tracking-tight">今日复习</h2>
           <div className="relative z-30">
             <button 
               onClick={() => setIsModeDropdownOpen(!isModeDropdownOpen)}
@@ -283,7 +294,7 @@ export function ReviewTab({ outfit, onOpenDressUp, onAddCoins, words, userId, on
           className="flex-1 flex flex-col min-h-0"
         >
           <div 
-            onClick={() => { if (studyMode === 'flashcard' && !isEnrichingCurrentWord) { setShowDefinition(true);  } }}
+            onClick={() => { if (studyMode === 'flashcard' && !isEnrichingCurrentWord) { setShowDefinition(true); resetIdle(); } }}
             className={`flex-1 bg-white/40 backdrop-blur-xl rounded-[2rem] p-6 sm:p-8 shadow-[0_8px_32px_rgba(31,38,135,0.05)] border border-white/60 flex flex-col items-center justify-center relative overflow-hidden group ${studyMode === 'flashcard' && !isEnrichingCurrentWord ? 'cursor-pointer' : ''}`}
           >
             {isEnrichingCurrentWord ? (
@@ -466,7 +477,7 @@ export function ReviewTab({ outfit, onOpenDressUp, onAddCoins, words, userId, on
         >
           <Shirt className="w-5 h-5" />
         </button>
-        <Pet outfit={outfit} />
+        <Pet outfit={outfit} isIdle={idleTime > 10} onTap={() => resetIdle()} />
       </div>
     </motion.div>
   );

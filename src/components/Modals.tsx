@@ -245,7 +245,19 @@ export function PetDressUpModal({
   );
 }
 
-export function UserProfileModal({ isOpen, onClose, email }: { isOpen: boolean, onClose: () => void, email?: string | null }) {
+export function UserProfileModal({ 
+  isOpen, 
+  onClose, 
+  email,
+  accent,
+  onChangeAccent
+}: { 
+  isOpen: boolean, 
+  onClose: () => void, 
+  email?: string | null,
+  accent: 'us' | 'uk',
+  onChangeAccent: (accent: 'us' | 'uk') => void
+}) {
   return (
     <BottomModal isOpen={isOpen} onClose={onClose} title="账号与设置">
       <div className="space-y-6">
@@ -264,7 +276,23 @@ export function UserProfileModal({ isOpen, onClose, email }: { isOpen: boolean, 
           <div className="bg-white/40 border border-white/60 rounded-2xl overflow-hidden shadow-sm backdrop-blur-md">
             <SettingRow label="每日学习目标" value="50 词" />
             <div className="h-px bg-white/60 mx-4" />
-            <SettingRow label="发音口音" value="美音" />
+            <div className="flex items-center justify-between p-4">
+              <span className="text-slate-700 font-medium">发音口音</span>
+              <div className="flex bg-slate-200/50 p-0.5 rounded-xl border border-slate-200/20">
+                <button
+                  onClick={() => onChangeAccent('us')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${accent === 'us' ? 'bg-white text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  美音 (US)
+                </button>
+                <button
+                  onClick={() => onChangeAccent('uk')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${accent === 'uk' ? 'bg-white text-teal-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  英音 (UK)
+                </button>
+              </div>
+            </div>
           </div>
         </div>
         

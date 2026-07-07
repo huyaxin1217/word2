@@ -4,45 +4,17 @@ import { motion, AnimatePresence } from 'motion/react';
 
 interface PetProps {
   outfit: PetOutfit;
-  isIdle?: boolean; // Keep for backward compatibility, but we'll use internal state mostly
-  onTap?: () => void;
+  isIdle: boolean;
+  onTap: () => void;
   hideSpeechBubble?: boolean;
 }
 
-export function Pet({ outfit, isIdle: externalIsIdle, onTap, hideSpeechBubble = false }: PetProps) {
+export function Pet({ outfit, isIdle, onTap, hideSpeechBubble = false }: PetProps) {
   const [quote, setQuote] = useState("咕噜~ 欢迎来到静谧自习室，今天也要闪闪发光呢！");
   const [showQuote, setShowQuote] = useState(!hideSpeechBubble);
   const [isBlinking, setIsBlinking] = useState(false);
   const [isTapped, setIsTapped] = useState(false);
   const [showHeart, setShowHeart] = useState(false);
-  const [localIdleTime, setLocalIdleTime] = useState(0);
-
-  // Determine if idle
-  const isIdle = externalIsIdle !== undefined ? externalIsIdle : localIdleTime > 10;
-
-  // Track global idle time independently to prevent parent re-renders
-  useEffect(() => {
-    if (externalIsIdle !== undefined) return; // Let parent manage it
-
-    const timer = setInterval(() => {
-      setLocalIdleTime(prev => prev + 1);
-    }, 1000);
-
-    const resetIdle = () => setLocalIdleTime(0);
-
-    window.addEventListener('mousemove', resetIdle);
-    window.addEventListener('keydown', resetIdle);
-    window.addEventListener('touchstart', resetIdle);
-    window.addEventListener('click', resetIdle);
-
-    return () => {
-      clearInterval(timer);
-      window.removeEventListener('mousemove', resetIdle);
-      window.removeEventListener('keydown', resetIdle);
-      window.removeEventListener('touchstart', resetIdle);
-      window.removeEventListener('click', resetIdle);
-    };
-  }, [externalIsIdle]);
 
   const idleQuotes = [
     "背单词就像收集星光，累积起来的那一刻会很美。",
@@ -89,7 +61,7 @@ export function Pet({ outfit, isIdle: externalIsIdle, onTap, hideSpeechBubble = 
   const handleTap = () => {
     setIsTapped(true);
     setShowHeart(true);
-    if (onTap) onTap();
+    onTap();
     
     if (!hideSpeechBubble) {
       setQuote(tapQuotes[Math.floor(Math.random() * tapQuotes.length)]);

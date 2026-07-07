@@ -37,6 +37,7 @@ export const getUserData = async (userId: string) => {
       currentBook: 'CET6',
       petOutfit: 'none' as PetOutfit,
       purchasedOutfits: ['none'] as PetOutfit[],
+      accent: 'us' as 'us' | 'uk',
       createdAt: serverTimestamp()
     };
     await setDoc(userRef, defaultData);
@@ -45,7 +46,7 @@ export const getUserData = async (userId: string) => {
   return userSnap.data();
 };
 
-export const updateUserData = async (userId: string, data: Partial<{ coins: number, currentBook: string, petOutfit: PetOutfit, purchasedOutfits: PetOutfit[] }>) => {
+export const updateUserData = async (userId: string, data: Partial<{ coins: number, currentBook: string, petOutfit: PetOutfit, purchasedOutfits: PetOutfit[], accent: 'us' | 'uk' }>) => {
   const userRef = doc(db, 'users', userId);
   await updateDoc(userRef, data);
 };

@@ -1,6 +1,11 @@
 let isUnlocked = false;
 let voicesCache: SpeechSynthesisVoice[] = [];
 let activeAudio: HTMLAudioElement | null = null;
+let globalAccentType: 1 | 2 = 2; // Default is 2 (US)
+
+export const setGlobalAccentType = (type: 1 | 2) => {
+  globalAccentType = type;
+};
 
 // Pre-load voices and handle dynamic loading on mobile/desktop browsers
 const loadVoices = () => {
@@ -37,7 +42,7 @@ export const unlockSpeech = () => {
 };
 
 // Find the best English voice matching BCP-47 tags and high-quality keywords
-const getBestEnglishVoice = (): SpeechSynthesisVoice | null => {
+const getBestEnglishVoice = (accent: 'us' | 'uk' = 'us'): SpeechSynthesisVoice | null => {
   if (typeof window === 'undefined' || !window.speechSynthesis) return null;
   
   // ALWAYS retrieve the most updated voice list from the browser dynamically
@@ -56,19 +61,22 @@ const getBestEnglishVoice = (): SpeechSynthesisVoice | null => {
 
   // Search preferences:
   // 1. Premium/Natural sounding English voices (Google, Siri, Samantha, Microsoft)
-  const preferredKeywords = ['google', 'siri', 'samantha', 'premium', 'natural', 'microsoft', 'daniel', 'karen', 'apple'];
+  const preferredKeywords = accent === 'us' 
+    ? ['google', 'siri', 'samantha', 'premium', 'natural', 'microsoft', 'karen', 'apple']
+    : ['daniel', 'google', 'siri', 'premium', 'natural', 'microsoft', 'apple', 'karen'];
   for (const keyword of preferredKeywords) {
     const found = enVoices.find(v => {
       const name = v.name.toLowerCase();
       const lang = v.lang.toLowerCase();
-      return name.includes(keyword) && (lang.includes('us') || lang.includes('gb') || lang.includes('en'));
+      const isTargetLang = accent === 'us' ? lang.includes('us') : (lang.includes('gb') || lang.includes('uk'));
+      return name.includes(keyword) && isTargetLang;
     });
     if (found) return found;
   }
 
-  // 2. Standard US English voice
-  const usVoice = enVoices.find(v => v.lang.toLowerCase().startsWith('en-us'));
-  if (usVoice) return usVoice;
+  // 2. Standard matching English voice
+  const langMatch = enVoices.find(v => v.lang.toLowerCase().startsWith(accent === 'us' ? 'en-us' : 'en-gb'));
+  if (langMatch) return langMatch;
 
   // 3. Fallback to any English voice
   return enVoices[0];
@@ -90,11 +98,11 @@ export const playLocalTTS = (text: string) => {
     const capitalizedText = formattedText.charAt(0).toUpperCase() + formattedText.slice(1).toLowerCase();
     
     const utterance = new SpeechSynthesisUtterance(capitalizedText);
-    utterance.lang = 'en-US';
+    utterance.lang = globalAccentType === 1 ? 'en-GB' : 'en-US';
     utterance.rate = 0.85;
     utterance.pitch = 1.0;
 
-    const bestVoice = getBestEnglishVoice();
+    const bestVoice = getBestEnglishVoice(globalAccentType === 1 ? 'uk' : 'us');
     if (bestVoice) {
       utterance.voice = bestVoice;
       utterance.lang = bestVoice.lang;
@@ -113,14 +121,14 @@ export const playAudio = (text: string) => {
   if (!text) return;
   const cleanText = text.trim();
   
-  // Try high-quality standard dictionary voice library (NetEase Youdao US Accent)
+  // Try high-quality standard dictionary voice library (NetEase Youdao Accent)
   try {
     if (activeAudio) {
       activeAudio.pause();
       activeAudio = null;
     }
 
-    const audioUrl = `https://dict.youdao.com/dictvoice?type=2&audio=${encodeURIComponent(cleanText)}`;
+    const audioUrl = `https://dict.youdao.com/dictvoice?type=${globalAccentType}&audio=${encodeURIComponent(cleanText)}`;
     const audio = new Audio(audioUrl);
     activeAudio = audio;
 
@@ -129,7 +137,8 @@ export const playAudio = (text: string) => {
       
       // Fallback 1: Google Translate TTS (highly stable, bypasses Youdao blocks)
       try {
-        const googleTtsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=en&client=tw-ob&q=${encodeURIComponent(cleanText)}`;
+        const targetLang = globalAccentType === 1 ? 'en-gb' : 'en';
+        const googleTtsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=${targetLang}&client=tw-ob&q=${encodeURIComponent(cleanText)}`;
         const googleAudio = new Audio(googleTtsUrl);
         activeAudio = googleAudio;
         
