@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Book, CheckCircle, Upload, FileText, ArrowLeft, Trash2, HelpCircle, Loader2, Play } from 'lucide-react';
-import { fetchCustomBooks, createCustomBook, deleteCustomBook } from '../services/db';
+import { fetchCustomBooks, createCustomBook, deleteCustomBook, getUserData } from '../services/db';
 import { initialWords } from '../data/words';
 
 // Common stop words to exclude from raw English word extraction
@@ -41,6 +41,12 @@ export function LibraryTab({
   // Words parsed
   const [allExtractedWords, setAllExtractedWords] = useState<string[]>([]);
   const [selectedWordMap, setSelectedWordMap] = useState<Record<string, boolean>>({});
+  const [wasSliced, setWasSliced] = useState(false);
+  const [originalCount, setOriginalCount] = useState(0);
+  
+  // Cooldown status
+  const [lastUploadAt, setLastUploadAt] = useState<number | null>(null);
+  const [cooldownText, setCooldownText] = useState<string | null>(null);
   
   // Delete confirmation state
   const [bookToDelete, setBookToDelete] = useState<string | null>(null);
@@ -52,17 +58,54 @@ export function LibraryTab({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Load custom books on mount
+  // Load custom books and cooldown info on mount
   useEffect(() => {
-    const loadBooks = async () => {
+    const loadBooksAndCooldown = async () => {
       if (!userId) return;
       setLoadingBooks(true);
-      const books = await fetchCustomBooks(userId);
-      setCustomBooks(books);
-      setLoadingBooks(false);
+      try {
+        const [books, userData] = await Promise.all([
+          fetchCustomBooks(userId),
+          getUserData(userId)
+        ]);
+        setCustomBooks(books);
+        if (userData?.lastUploadAt) {
+          setLastUploadAt(userData.lastUploadAt);
+        }
+      } catch (err) {
+        console.error('Failed to load user book data/cooldown:', err);
+      } finally {
+        setLoadingBooks(false);
+      }
     };
-    loadBooks();
+    loadBooksAndCooldown();
   }, [userId]);
+
+  // Handle dynamic countdown updates
+  useEffect(() => {
+    if (!lastUploadAt) {
+      setCooldownText(null);
+      return;
+    }
+
+    const checkCooldown = () => {
+      const now = Date.now();
+      const oneDay = 24 * 60 * 60 * 1000;
+      const elapsed = now - lastUploadAt;
+      if (elapsed < oneDay) {
+        const remainingTime = oneDay - elapsed;
+        const hours = Math.floor(remainingTime / (60 * 60 * 1000));
+        const minutes = Math.ceil((remainingTime % (60 * 60 * 1000)) / (60 * 1000));
+        setCooldownText(`还需等待 ${hours} 小时 ${minutes} 分钟`);
+      } else {
+        setCooldownText(null);
+      }
+    };
+
+    checkCooldown();
+    const interval = setInterval(checkCooldown, 10000); // Check every 10 seconds
+    return () => clearInterval(interval);
+  }, [lastUploadAt]);
 
   // Dynamically load PDF.js from Cloudflare CDN
   const loadPdfJS = (): Promise<any> => {
@@ -145,12 +188,23 @@ export function LibraryTab({
         throw new Error(isTxt ? '未在 TXT 中检测到足够的英文单词。请上传包含英文词汇的文档。' : '未在 PDF 中检测到足够的英文单词。请上传包含英文词汇的书籍或文档。');
       }
 
-      // Extract all words from the document without any volume cap
-      setAllExtractedWords(filtered);
+      const totalFound = filtered.length;
+      setOriginalCount(totalFound);
+      
+      let finalWords = filtered;
+      if (totalFound > 5000) {
+        finalWords = filtered.slice(0, 5000);
+        setWasSliced(true);
+      } else {
+        setWasSliced(false);
+      }
+
+      // Extract words from the document (capped at 5000 to protect Firestore performance)
+      setAllExtractedWords(finalWords);
       
       // Initialize map (select all by default)
       const map: Record<string, boolean> = {};
-      filtered.forEach(w => { map[w] = true; });
+      finalWords.forEach(w => { map[w] = true; });
       setSelectedWordMap(map);
       
       // Set default book details
@@ -208,6 +262,25 @@ export function LibraryTab({
       alert('请至少勾选一个单词进行导入！');
       return;
     }
+
+    try {
+      // Check 24-hour upload limit
+      const userData = await getUserData(userId);
+      const lastUpload = userData?.lastUploadAt;
+      if (lastUpload) {
+        const now = Date.now();
+        const oneDay = 24 * 60 * 60 * 1000;
+        if (now - lastUpload < oneDay) {
+          const remainingTime = oneDay - (now - lastUpload);
+          const hours = Math.floor(remainingTime / (60 * 60 * 1000));
+          const minutes = Math.ceil((remainingTime % (60 * 60 * 1000)) / (60 * 1000));
+          alert(`由于云端配额限制，每日限导入 1 次自定义词书。请在 ${hours} 小时 ${minutes} 分钟后再试，或直接学习已有词书。`);
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('Failed to verify upload limit:', err);
+    }
     
     setImportStep('processing');
     setImportProgress(0);
@@ -259,6 +332,9 @@ export function LibraryTab({
     try {
       setCurrentProcessingWord('正在保存到云端森林数据库...');
       await createCustomBook(userId, bookTitle, bookDesc, enrichedList);
+      
+      // Update local cooldown state
+      setLastUploadAt(Date.now());
       
       // Reload custom books
       const updatedBooks = await fetchCustomBooks(userId);
@@ -398,12 +474,27 @@ export function LibraryTab({
               </div>
             )}
 
+            {cooldownText && (
+              <div className="bg-amber-50 border border-amber-200/60 text-amber-800 text-xs rounded-xl p-3.5 mb-4 leading-relaxed flex items-start gap-2 shadow-sm">
+                <span className="text-sm">⚠️</span>
+                <div>
+                  <span className="font-bold">每日导入额度已用完</span>：由于云端免费资源限制，每日限导入 1 次自定义词书。请在 <b>{cooldownText}</b> 后再次上传。
+                </div>
+              </div>
+            )}
+
             <div 
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={`flex-1 min-h-[250px] border-2 border-dashed rounded-3xl p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-300 ${isDragging ? 'border-teal-500 bg-teal-50/30 scale-[0.98]' : 'border-slate-300 bg-white/40 hover:bg-white/60'}`}
+              onDragOver={cooldownText ? undefined : handleDragOver}
+              onDragLeave={cooldownText ? undefined : handleDragLeave}
+              onDrop={cooldownText ? undefined : handleDrop}
+              onClick={cooldownText ? undefined : () => fileInputRef.current?.click()}
+              className={`flex-1 min-h-[250px] border-2 border-dashed rounded-3xl p-8 flex flex-col items-center justify-center text-center transition-all duration-300 ${
+                cooldownText 
+                  ? 'border-slate-200 bg-slate-50/50 cursor-not-allowed opacity-80' 
+                  : isDragging 
+                    ? 'border-teal-500 bg-teal-50/30 scale-[0.98]' 
+                    : 'border-slate-300 bg-white/40 hover:bg-white/60 cursor-pointer'
+              }`}
             >
               <input 
                 type="file" 
@@ -411,22 +502,36 @@ export function LibraryTab({
                 onChange={handleFileSelect}
                 accept="application/pdf, text/plain"
                 className="hidden" 
+                disabled={!!cooldownText}
               />
               
-              <div className="p-5 rounded-2xl bg-white/80 shadow-md shadow-slate-100/50 mb-4 text-teal-600">
+              <div className={`p-5 rounded-2xl bg-white/80 shadow-md shadow-slate-100/50 mb-4 ${cooldownText ? 'text-slate-400' : 'text-teal-600'}`}>
                 <FileText className="w-10 h-10" />
               </div>
-              <h3 className="text-lg font-bold text-slate-800 mb-1">拖拽 PDF / TXT 文件到此处</h3>
-              <p className="text-sm text-slate-500 mb-6 max-w-xs leading-relaxed">或点击此处选择您的 PDF 书籍或 TXT 单词本 (建议 20MB 以内)</p>
+              <h3 className="text-lg font-bold text-slate-800 mb-1">
+                {cooldownText ? '导入功能冷却中' : '拖拽 PDF / TXT 文件到此处'}
+              </h3>
+              <p className="text-sm text-slate-500 mb-6 max-w-xs leading-relaxed">
+                {cooldownText 
+                  ? `您今日已成功导入，请在 ${cooldownText} 后再次添加。` 
+                  : '或点击此处选择您的 PDF 书籍或 TXT 单词本 (建议 20MB 以内)'}
+              </p>
               
-              <div className="bg-teal-50 text-teal-600 text-xs font-semibold px-4 py-2 rounded-full border border-teal-100 flex items-center space-x-1.5">
-                <span>支持标准文本 PDF 与 UTF-8 编码的 TXT 文件</span>
+              <div className={`${cooldownText ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-teal-50 text-teal-600 border-teal-100'} text-xs font-semibold px-4 py-2 rounded-full border flex items-center space-x-1.5`}>
+                <span>{cooldownText ? `冷却中：${cooldownText}` : '支持标准文本 PDF 与 UTF-8 编码的 TXT 文件'}</span>
               </div>
             </div>
 
-            <p className="text-xs text-slate-400 mt-6 leading-relaxed text-center px-4 mb-16">
-              💡 <b>温馨提示</b>：系统将自动在浏览器中精细扫描并提取所有生词词干，排除常见停用词 (the, a, is等)，随后调用 AI 为您匹配标准英美音标与翻译。
-            </p>
+            <div className="mt-4 text-[11px] text-slate-400 leading-relaxed space-y-1.5 px-2 mb-12">
+              <div className="flex items-start gap-1.5">
+                <span className="text-amber-500">✦</span>
+                <span><b>导入额度</b>：每日可导入 1 次，单本词书上限 5000 词（超出将自动截断保留高频词）。</span>
+              </div>
+              <div className="flex items-start gap-1.5">
+                <span className="text-teal-500">✦</span>
+                <span><b>自动解析</b>：系统提取词干并排除 a, standard 等停用词，匹配标准音标与中文释义。</span>
+              </div>
+            </div>
           </motion.div>
         )}
 
@@ -472,6 +577,17 @@ export function LibraryTab({
                 />
               </div>
             </div>
+
+            {wasSliced && (
+              <div className="bg-amber-50/90 border border-amber-200 text-amber-800 text-xs rounded-2xl p-4 mb-4 leading-relaxed shadow-sm">
+                <div className="font-bold mb-1 flex items-center gap-1">
+                  <span>⚠️ 提示：检测到大量单词 ({originalCount} 个)</span>
+                </div>
+                <div>
+                  为了确保浏览器界面流畅以及云端资源合理分配，单本自定义词书已自动精编至前 <b>5000</b> 个生词。同时，为了避免瞬间耗尽您的 Firebase 免费写配额，<b>每日限制导入 1 次自定义词书</b>。
+                </div>
+              </div>
+            )}
 
             {/* Words list header */}
             <div className="flex items-center justify-between px-1 mb-2">

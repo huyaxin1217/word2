@@ -38,6 +38,7 @@ export const getUserData = async (userId: string) => {
       petOutfit: 'none' as PetOutfit,
       purchasedOutfits: ['none'] as PetOutfit[],
       accent: 'us' as 'us' | 'uk',
+      lastUploadAt: undefined as number | undefined,
       createdAt: serverTimestamp()
     };
     await setDoc(userRef, defaultData);
@@ -46,7 +47,7 @@ export const getUserData = async (userId: string) => {
   return userSnap.data();
 };
 
-export const updateUserData = async (userId: string, data: Partial<{ coins: number, currentBook: string, petOutfit: PetOutfit, purchasedOutfits: PetOutfit[], accent: 'us' | 'uk' }>) => {
+export const updateUserData = async (userId: string, data: Partial<{ coins: number, currentBook: string, petOutfit: PetOutfit, purchasedOutfits: PetOutfit[], accent: 'us' | 'uk', lastUploadAt: number }>) => {
   const userRef = doc(db, 'users', userId);
   await updateDoc(userRef, data);
 };
@@ -87,6 +88,12 @@ export const createCustomBook = async (
     desc,
     wordCount: words.length,
     createdAt: serverTimestamp()
+  });
+
+  // Update user's last upload timestamp
+  const userRef = doc(db, 'users', userId);
+  await updateDoc(userRef, {
+    lastUploadAt: Date.now()
   });
   
   // Batch write words in chunks of 400 (Firestore limits batches to 500 operations)

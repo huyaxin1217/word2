@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Word, WordFamiliarity, PetOutfit } from '../types';
 import { TreeProgress } from './TreeProgress';
 import { Pet } from './Pet';
@@ -17,6 +17,7 @@ interface StudyTabProps {
 }
 
 export function StudyTab({ outfit, onOpenDressUp, onAddCoins, words, userId, onWordStudied }: StudyTabProps) {
+  const tabRef = useRef<HTMLDivElement>(null);
   const [queue, setQueue] = useState<Word[]>([]);
   const [showDefinition, setShowDefinition] = useState(false);
   const [idleTime, setIdleTime] = useState(0);
@@ -207,11 +208,12 @@ export function StudyTab({ outfit, onOpenDressUp, onAddCoins, words, userId, onW
 
   return (
     <motion.div 
+      ref={tabRef}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
       transition={{ duration: 0.3 }}
-      className="flex flex-col h-full px-6"
+      className="flex flex-col h-full px-6 relative"
       onClick={resetIdle}
     >
       <div className="flex items-center justify-between mb-2 mt-4">
@@ -477,7 +479,7 @@ export function StudyTab({ outfit, onOpenDressUp, onAddCoins, words, userId, onW
         >
           <Shirt className="w-5 h-5" />
         </button>
-        <Pet outfit={outfit} isIdle={idleTime > 10} onTap={() => resetIdle()} />
+        <Pet outfit={outfit} isIdle={idleTime > 10} onTap={() => resetIdle()} containerRef={tabRef} />
       </div>
     </motion.div>
   );

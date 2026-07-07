@@ -7,9 +7,10 @@ interface PetProps {
   isIdle: boolean;
   onTap: () => void;
   hideSpeechBubble?: boolean;
+  containerRef?: React.RefObject<HTMLDivElement | null>;
 }
 
-export function Pet({ outfit, isIdle, onTap, hideSpeechBubble = false }: PetProps) {
+export function Pet({ outfit, isIdle, onTap, hideSpeechBubble = false, containerRef }: PetProps) {
   const [quote, setQuote] = useState("咕噜~ 欢迎来到静谧自习室，今天也要闪闪发光呢！");
   const [showQuote, setShowQuote] = useState(!hideSpeechBubble);
   const [isBlinking, setIsBlinking] = useState(false);
@@ -73,7 +74,14 @@ export function Pet({ outfit, isIdle, onTap, hideSpeechBubble = false }: PetProp
   };
 
   return (
-    <div className="relative flex flex-col items-center cursor-pointer select-none" onClick={handleTap}>
+    <motion.div 
+      drag 
+      dragConstraints={containerRef}
+      dragElastic={0.1}
+      dragMomentum={false}
+      onTap={handleTap}
+      className="relative flex flex-col items-center cursor-grab active:cursor-grabbing select-none"
+    >
       {/* Tap heart/sparkle effect */}
       <AnimatePresence>
         {showHeart && (
@@ -95,10 +103,10 @@ export function Pet({ outfit, isIdle, onTap, hideSpeechBubble = false }: PetProp
             initial={{ opacity: 0, x: 10, scale: 0.9 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
-            className="absolute right-24 top-2 w-48 bg-white/95 backdrop-blur-md px-3.5 py-2.5 rounded-2xl text-xs font-medium text-slate-600 shadow-[0_6px_16px_rgba(148,163,184,0.15)] border border-white/80 z-20 whitespace-normal leading-relaxed text-left"
+            className="group absolute right-24 top-2 w-48 bg-white/15 hover:bg-white/95 backdrop-blur-[1.5px] hover:backdrop-blur-md px-3.5 py-2.5 rounded-2xl text-xs font-medium text-slate-500/80 hover:text-slate-700 shadow-none hover:shadow-[0_6px_16px_rgba(148,163,184,0.15)] border border-white/20 hover:border-white/80 z-20 whitespace-normal leading-relaxed text-left transition-all duration-300 cursor-help"
           >
             {quote}
-            <div className="absolute right-[-4px] top-1/2 -translate-y-1/2 w-2 h-2 bg-white/95 rotate-45 border-t border-r border-white/80"></div>
+            <div className="absolute right-[-4px] top-1/2 -translate-y-1/2 w-2 h-2 bg-white/15 group-hover:bg-white/95 rotate-45 border-t border-r border-white/20 group-hover:border-white/80 transition-all duration-300"></div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -715,7 +723,7 @@ export function Pet({ outfit, isIdle, onTap, hideSpeechBubble = false }: PetProp
           </motion.div>
         )}
       </motion.div>
-    </div>
+    </motion.div>
   );
 }
 
