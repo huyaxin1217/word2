@@ -2,7 +2,7 @@ import React from 'react';
 import { motion } from 'motion/react';
 import { Word } from '../types';
 
-export function ProgressTab({ words = [], coins = 0 }: { words?: Word[], coins?: number }) {
+export function ProgressTab({ words = [], coins = 0, bookName = '六级核心词汇' }: { words?: Word[], coins?: number, bookName?: string }) {
   const matureTrees = words.filter(w => w.familiarity === 3).length;
 
   return (
@@ -17,7 +17,7 @@ export function ProgressTab({ words = [], coins = 0 }: { words?: Word[], coins?:
       
       <div className="bg-white/40 backdrop-blur-xl rounded-2xl p-6 shadow-sm border border-white/60 mb-6">
         <h3 className="text-lg font-semibold text-slate-800 tracking-wide mb-2">
-          {words[0]?.book === 'CET4' ? '四级核心词汇' : '六级核心词汇'}
+          {bookName}
         </h3>
         <p className="text-sm text-slate-500 mb-6">已学习 {words.filter(w => w.progress).length} / {words.length} 词</p>
         

@@ -10,7 +10,7 @@ import { User as UserIcon, Book, Layers, BarChart2, RefreshCcw, FileText } from 
 import { motion, AnimatePresence } from 'motion/react';
 import { auth } from '../firebase';
 import { User } from 'firebase/auth';
-import { initializeVocabulary, getUserData, fetchWordsForStudy, updateUserData, subscribeToUserData, addCoinsToUser } from '../services/db';
+import { initializeVocabulary, getUserData, fetchWordsForStudy, updateUserData, subscribeToUserData, addCoinsToUser, fetchBookTitle } from '../services/db';
 import { setGlobalAccentType } from '../utils/audio';
 
 export function MainApp({ user }: { user: User }) {
@@ -24,6 +24,7 @@ export function MainApp({ user }: { user: User }) {
   
   const [userId, setUserId] = useState<string | null>(null);
   const [currentBook, setCurrentBook] = useState<string>('CET6');
+  const [currentBookName, setCurrentBookName] = useState<string>('六级核心词汇');
   const [allWords, setAllWords] = useState<Word[]>([]);
   const [newWords, setNewWords] = useState<Word[]>([]);
   const [reviewWords, setReviewWords] = useState<Word[]>([]);
@@ -47,18 +48,24 @@ export function MainApp({ user }: { user: User }) {
           setPurchasedOutfits(['none']);
         }
         if (userData?.currentBook) setCurrentBook(userData.currentBook);
+        const name = await fetchBookTitle(uid, userData?.currentBook || 'CET6');
+        setCurrentBookName(name);
         if (userData?.accent) {
           setAccent(userData.accent);
           setGlobalAccentType(userData.accent === 'uk' ? 1 : 2);
         }
 
         // Start listening to user document updates in real-time
-        unsubscribeUser = subscribeToUserData(uid, (data) => {
+        unsubscribeUser = subscribeToUserData(uid, async (data) => {
           if (data) {
             if (typeof data.coins === 'number') setCoins(data.coins);
             if (data.petOutfit) setOutfit(data.petOutfit);
             if (data.purchasedOutfits) setPurchasedOutfits(data.purchasedOutfits);
-            if (data.currentBook) setCurrentBook(data.currentBook);
+            if (data.currentBook) {
+              setCurrentBook(data.currentBook);
+              const nameUpdate = await fetchBookTitle(uid, data.currentBook);
+              setCurrentBookName(nameUpdate);
+            }
             if (data.accent) {
               setAccent(data.accent);
               setGlobalAccentType(data.accent === 'uk' ? 1 : 2);
@@ -130,6 +137,8 @@ export function MainApp({ user }: { user: User }) {
     if (!userId) return;
     setLoading(true);
     setCurrentBook(newBook);
+    const name = await fetchBookTitle(userId, newBook);
+    setCurrentBookName(name);
     await updateUserData(userId, { currentBook: newBook });
     
     const fetchedWords = await fetchWordsForStudy(userId, newBook);
@@ -204,7 +213,7 @@ export function MainApp({ user }: { user: User }) {
             )}
             {activeTab === 'progress' && (
               <motion.div key="progress" className="h-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <ProgressTab words={allWords} coins={coins} />
+                <ProgressTab words={allWords} coins={coins} bookName={currentBookName} />
               </motion.div>
             )}
             {activeTab === 'a4' && (

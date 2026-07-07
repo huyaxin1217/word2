@@ -73,6 +73,21 @@ export const fetchCustomBooks = async (userId: string) => {
   }
 };
 
+export const fetchBookTitle = async (userId: string, bookId: string): Promise<string> => {
+  if (bookId === 'CET4') return '四级核心词汇';
+  if (bookId === 'CET6') return '六级核心词汇';
+  try {
+    const bookRef = doc(db, 'users', userId, 'custom_books', bookId);
+    const snap = await getDoc(bookRef);
+    if (snap.exists()) {
+      return snap.data().title || '未命名词书';
+    }
+  } catch (err) {
+    console.error("Failed to fetch custom book title:", err);
+  }
+  return '自定义词书';
+};
+
 export const createCustomBook = async (
   userId: string, 
   title: string, 
