@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc, query, where, writeBatch, serverTimestamp, Timestamp, onSnapshot, increment } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, query, where, writeBatch, serverTimestamp, Timestamp, onSnapshot, increment, deleteDoc } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { initialWords } from '../data/words';
 import { Word, WordFamiliarity, PetOutfit, UserStats } from '../types';
@@ -50,21 +50,132 @@ export const updateUserData = async (userId: string, data: Partial<{ coins: numb
   await updateDoc(userRef, data);
 };
 
+export const fetchCustomBooks = async (userId: string) => {
+  try {
+    const booksRef = collection(db, 'users', userId, 'custom_books');
+    const booksSnap = await getDocs(booksRef);
+    const books: { id: string, title: string, desc: string, wordCount: number }[] = [];
+    booksSnap.forEach(docSnap => {
+      const data = docSnap.data();
+      books.push({
+        id: docSnap.id,
+        title: data.title || '未命名词书',
+        desc: data.desc || '自定义导入',
+        wordCount: data.wordCount || 0
+      });
+    });
+    return books;
+  } catch (err) {
+    console.error("Failed to fetch custom books:", err);
+    return [];
+  }
+};
+
+export const createCustomBook = async (
+  userId: string, 
+  title: string, 
+  desc: string, 
+  words: { english: string; phonetic: string; definition: string; exampleEn: string; exampleZh: string }[]
+) => {
+  const bookId = `custom_${Date.now()}`;
+  const bookRef = doc(db, 'users', userId, 'custom_books', bookId);
+  
+  // Create book metadata document
+  await setDoc(bookRef, {
+    title,
+    desc,
+    wordCount: words.length,
+    createdAt: serverTimestamp()
+  });
+  
+  // Batch write words in chunks of 400 (Firestore limits batches to 500 operations)
+  const chunkSize = 400;
+  for (let i = 0; i < words.length; i += chunkSize) {
+    const chunk = words.slice(i, i + chunkSize);
+    const batch = writeBatch(db);
+    
+    chunk.forEach(word => {
+      const docId = `${bookId}_${word.english.replace(/\W/g, '')}`;
+      const wordRef = doc(db, 'users', userId, 'custom_books', bookId, 'words', docId);
+      batch.set(wordRef, {
+        english: word.english,
+        phonetic: word.phonetic,
+        definition: word.definition,
+        exampleEn: word.exampleEn,
+        exampleZh: word.exampleZh,
+        book: bookId
+      });
+    });
+    
+    await batch.commit();
+  }
+  
+  return bookId;
+};
+
+export const deleteCustomBook = async (userId: string, bookId: string) => {
+  try {
+    // Delete all word documents in the subcollection
+    const wordsRef = collection(db, 'users', userId, 'custom_books', bookId, 'words');
+    const wordsSnap = await getDocs(wordsRef);
+    
+    const chunkSize = 400;
+    const docs = wordsSnap.docs;
+    for (let i = 0; i < docs.length; i += chunkSize) {
+      const chunk = docs.slice(i, i + chunkSize);
+      const batch = writeBatch(db);
+      chunk.forEach(docSnap => {
+        batch.delete(docSnap.ref);
+      });
+      await batch.commit();
+    }
+    
+    // Then, delete the custom book metadata document
+    const bookRef = doc(db, 'users', userId, 'custom_books', bookId);
+    await deleteDoc(bookRef);
+  } catch (err) {
+    console.error("Failed to delete custom book:", err);
+  }
+};
+
 export const fetchWordsForStudy = async (userId: string, book: string): Promise<Word[]> => {
-  // Map and deduplicate static words from the local file
   const seenIds = new Set<string>();
   const allWords: Word[] = [];
   
-  initialWords.filter(w => w.book === book).forEach(w => {
-    const docId = `${w.book}_${w.english.replace(/\W/g, '')}`;
-    if (!seenIds.has(docId)) {
-      seenIds.add(docId);
-      allWords.push({
-        id: docId,
-        ...w
-      } as unknown as Word);
+  if (book === 'CET4' || book === 'CET6') {
+    // Map and deduplicate static words from the local file
+    initialWords.filter(w => w.book === book).forEach(w => {
+      const docId = `${w.book}_${w.english.replace(/\W/g, '')}`;
+      if (!seenIds.has(docId)) {
+        seenIds.add(docId);
+        allWords.push({
+          id: docId,
+          ...w
+        } as unknown as Word);
+      }
+    });
+  } else {
+    // Fetch custom words for this custom book from Firestore
+    try {
+      const customWordsRef = collection(db, 'users', userId, 'custom_books', book, 'words');
+      const customWordsSnap = await getDocs(customWordsRef);
+      customWordsSnap.forEach(docSnap => {
+        const data = docSnap.data();
+        allWords.push({
+          id: docSnap.id,
+          english: data.english,
+          phonetic: data.phonetic || '',
+          definition: data.definition || '',
+          exampleEn: data.exampleEn || '',
+          exampleZh: data.exampleZh || '',
+          book: book,
+          familiarity: 0
+        } as unknown as Word);
+      });
+    } catch (err) {
+      console.error("Failed to fetch custom words:", err);
     }
-  });
+  }
   
   // Fetch user progress
   const progressRef = collection(db, 'users', userId, 'progress');
@@ -75,7 +186,7 @@ export const fetchWordsForStudy = async (userId: string, book: string): Promise<
     progressMap.set(doc.id, doc.data());
   });
   
-  // Merge static dictionary with user progress
+  // Merge static/custom dictionary with user progress
   return allWords.map(w => {
     const p = progressMap.get(w.id);
     const resolvedFam = p && typeof p.familiarity === 'number' ? (p.familiarity as WordFamiliarity) : 0;

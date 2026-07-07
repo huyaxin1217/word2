@@ -1,13 +1,48 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Word } from '../types';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Volume2, Search, Filter, BookOpen, ChevronDown, Check } from 'lucide-react';
 import { playAudio } from '../utils/audio';
+import { fetchCustomBooks } from '../services/db';
 
-export function A4Tab({ words, currentBook, onChangeBook }: { words: Word[], currentBook: string, onChangeBook: (book: string) => void }) {
+interface CustomBook {
+  id: string;
+  title: string;
+  desc: string;
+  wordCount: number;
+}
+
+export function A4Tab({ 
+  userId,
+  words, 
+  currentBook, 
+  onChangeBook 
+}: { 
+  userId: string;
+  words: Word[];
+  currentBook: string;
+  onChangeBook: (book: string) => void;
+}) {
   const [searchTerm, setSearchTerm] = useState('');
   const [hideDefinition, setHideDefinition] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [customBooks, setCustomBooks] = useState<CustomBook[]>([]);
+
+  useEffect(() => {
+    const loadBooks = async () => {
+      if (!userId) return;
+      const books = await fetchCustomBooks(userId);
+      setCustomBooks(books);
+    };
+    loadBooks();
+  }, [userId]);
+
+  const getBookTitle = () => {
+    if (currentBook === 'CET4') return '四级核心词汇';
+    if (currentBook === 'CET6') return '六级核心词汇';
+    const matchedCustom = customBooks.find(b => b.id === currentBook);
+    return matchedCustom ? matchedCustom.title : '自定义词书';
+  };
 
   const filteredWords = words.filter(w => 
     w.english.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -26,43 +61,59 @@ export function A4Tab({ words, currentBook, onChangeBook }: { words: Word[], cur
               className="flex items-center space-x-1.5 bg-white/70 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-200/80 shadow-sm hover:bg-white active:scale-95 transition-all cursor-pointer text-sm font-medium text-slate-700"
             >
               <BookOpen className="w-4 h-4 text-teal-500" />
-              <span>{currentBook === 'CET4' ? '四级核心词汇' : '六级核心词汇'}</span>
+              <span>{getBookTitle()}</span>
               <ChevronDown className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-300 ${isDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
             
-            {isDropdownOpen && (
-              <>
-                <div className="fixed inset-0 z-30" onClick={() => setIsDropdownOpen(false)} />
-                <motion.div 
-                  initial={{ opacity: 0, y: 8, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 8, scale: 0.95 }}
-                  transition={{ duration: 0.15 }}
-                  className="absolute right-0 mt-2 w-44 bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-100 p-1.5 z-40 origin-top-right flex flex-col space-y-0.5"
-                >
-                  <button 
-                    onClick={() => {
-                      onChangeBook('CET4');
-                      setIsDropdownOpen(false);
-                    }}
-                    className={`flex items-center justify-between w-full px-3.5 py-2 rounded-xl text-left text-sm font-medium transition-colors ${currentBook === 'CET4' ? 'bg-teal-50 text-teal-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}
+            <AnimatePresence>
+              {isDropdownOpen && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setIsDropdownOpen(false)} />
+                  <motion.div 
+                    initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 8, scale: 0.95 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute right-0 mt-2 w-48 bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-100 p-1.5 z-40 origin-top-right flex flex-col space-y-0.5 max-h-64 overflow-y-auto"
                   >
-                    <span>四级核心词汇</span>
-                    {currentBook === 'CET4' && <Check className="w-4 h-4 text-teal-600" />}
-                  </button>
-                  <button 
-                    onClick={() => {
-                      onChangeBook('CET6');
-                      setIsDropdownOpen(false);
-                    }}
-                    className={`flex items-center justify-between w-full px-3.5 py-2 rounded-xl text-left text-sm font-medium transition-colors ${currentBook === 'CET6' ? 'bg-teal-50 text-teal-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}
-                  >
-                    <span>六级核心词汇</span>
-                    {currentBook === 'CET6' && <Check className="w-4 h-4 text-teal-600" />}
-                  </button>
-                </motion.div>
-              </>
-            )}
+                    <button 
+                      onClick={() => {
+                        onChangeBook('CET4');
+                        setIsDropdownOpen(false);
+                      }}
+                      className={`flex items-center justify-between w-full px-3.5 py-2 rounded-xl text-left text-sm font-medium transition-colors ${currentBook === 'CET4' ? 'bg-teal-50 text-teal-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}
+                    >
+                      <span>四级核心词汇</span>
+                      {currentBook === 'CET4' && <Check className="w-4 h-4 text-teal-600" />}
+                    </button>
+                    <button 
+                      onClick={() => {
+                        onChangeBook('CET6');
+                        setIsDropdownOpen(false);
+                      }}
+                      className={`flex items-center justify-between w-full px-3.5 py-2 rounded-xl text-left text-sm font-medium transition-colors ${currentBook === 'CET6' ? 'bg-teal-50 text-teal-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}
+                    >
+                      <span>六级核心词汇</span>
+                      {currentBook === 'CET6' && <Check className="w-4 h-4 text-teal-600" />}
+                    </button>
+
+                    {customBooks.map(book => (
+                      <button 
+                        key={book.id}
+                        onClick={() => {
+                          onChangeBook(book.id);
+                          setIsDropdownOpen(false);
+                        }}
+                        className={`flex items-center justify-between w-full px-3.5 py-2 rounded-xl text-left text-sm font-medium transition-colors ${currentBook === book.id ? 'bg-teal-50 text-teal-700 font-semibold' : 'text-slate-600 hover:bg-slate-50'}`}
+                      >
+                        <span className="truncate max-w-[110px]">{book.title}</span>
+                        {currentBook === book.id && <Check className="w-4 h-4 text-teal-600 flex-shrink-0" />}
+                      </button>
+                    ))}
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
           </div>
         </div>
         <p className="text-sm text-slate-500 mt-1">快速浏览所有单词，提升复习效率。</p>

@@ -183,7 +183,7 @@ export function MainApp({ user }: { user: User }) {
             )}
             {activeTab === 'library' && (
               <motion.div key="library" className="h-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <LibraryTab currentBook={currentBook} onChangeBook={handleBookChange} />
+                <LibraryTab userId={userId || ''} currentBook={currentBook} onChangeBook={handleBookChange} />
               </motion.div>
             )}
             {activeTab === 'progress' && (
@@ -193,7 +193,7 @@ export function MainApp({ user }: { user: User }) {
             )}
             {activeTab === 'a4' && (
               <motion.div key="a4" className="h-full" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                <A4Tab words={allWords} currentBook={currentBook} onChangeBook={handleBookChange} />
+                <A4Tab userId={userId || ''} words={allWords} currentBook={currentBook} onChangeBook={handleBookChange} />
               </motion.div>
             )}
           </AnimatePresence>

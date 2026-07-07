@@ -4,16 +4,45 @@ import { motion, AnimatePresence } from 'motion/react';
 
 interface PetProps {
   outfit: PetOutfit;
-  isIdle: boolean;
-  onTap: () => void;
+  isIdle?: boolean; // Keep for backward compatibility, but we'll use internal state mostly
+  onTap?: () => void;
+  hideSpeechBubble?: boolean;
 }
 
-export function Pet({ outfit, isIdle, onTap }: PetProps) {
+export function Pet({ outfit, isIdle: externalIsIdle, onTap, hideSpeechBubble = false }: PetProps) {
   const [quote, setQuote] = useState("咕噜~ 欢迎来到静谧自习室，今天也要闪闪发光呢！");
-  const [showQuote, setShowQuote] = useState(true);
+  const [showQuote, setShowQuote] = useState(!hideSpeechBubble);
   const [isBlinking, setIsBlinking] = useState(false);
   const [isTapped, setIsTapped] = useState(false);
   const [showHeart, setShowHeart] = useState(false);
+  const [localIdleTime, setLocalIdleTime] = useState(0);
+
+  // Determine if idle
+  const isIdle = externalIsIdle !== undefined ? externalIsIdle : localIdleTime > 10;
+
+  // Track global idle time independently to prevent parent re-renders
+  useEffect(() => {
+    if (externalIsIdle !== undefined) return; // Let parent manage it
+
+    const timer = setInterval(() => {
+      setLocalIdleTime(prev => prev + 1);
+    }, 1000);
+
+    const resetIdle = () => setLocalIdleTime(0);
+
+    window.addEventListener('mousemove', resetIdle);
+    window.addEventListener('keydown', resetIdle);
+    window.addEventListener('touchstart', resetIdle);
+    window.addEventListener('click', resetIdle);
+
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('mousemove', resetIdle);
+      window.removeEventListener('keydown', resetIdle);
+      window.removeEventListener('touchstart', resetIdle);
+      window.removeEventListener('click', resetIdle);
+    };
+  }, [externalIsIdle]);
 
   const idleQuotes = [
     "背单词就像收集星光，累积起来的那一刻会很美。",
@@ -45,7 +74,7 @@ export function Pet({ outfit, isIdle, onTap }: PetProps) {
 
   // Periodic speech bubble for idle states
   useEffect(() => {
-    if (isIdle && !isTapped) {
+    if (isIdle && !isTapped && !hideSpeechBubble) {
       const interval = setInterval(() => {
         setQuote(idleQuotes[Math.floor(Math.random() * idleQuotes.length)]);
         setShowQuote(true);
@@ -55,14 +84,17 @@ export function Pet({ outfit, isIdle, onTap }: PetProps) {
 
       return () => clearInterval(interval);
     }
-  }, [isIdle, isTapped]);
+  }, [isIdle, isTapped, hideSpeechBubble]);
 
   const handleTap = () => {
-    setQuote(tapQuotes[Math.floor(Math.random() * tapQuotes.length)]);
-    setShowQuote(true);
     setIsTapped(true);
     setShowHeart(true);
-    onTap();
+    if (onTap) onTap();
+    
+    if (!hideSpeechBubble) {
+      setQuote(tapQuotes[Math.floor(Math.random() * tapQuotes.length)]);
+      setShowQuote(true);
+    }
     
     setTimeout(() => setIsTapped(false), 800);
     setTimeout(() => setShowHeart(false), 1500);
@@ -86,15 +118,15 @@ export function Pet({ outfit, isIdle, onTap }: PetProps) {
       </AnimatePresence>
 
       <AnimatePresence>
-        {showQuote && (
+        {showQuote && !hideSpeechBubble && (
           <motion.div 
-            initial={{ opacity: 0, y: 10, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
+            initial={{ opacity: 0, x: 10, scale: 0.9 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9 }}
-            className="absolute -top-16 whitespace-nowrap bg-white/90 backdrop-blur-md px-4 py-2.5 rounded-2xl text-xs font-medium text-slate-600 shadow-[0_4px_12px_rgba(148,163,184,0.12)] border border-white/60 z-20"
+            className="absolute right-24 top-2 w-48 bg-white/95 backdrop-blur-md px-3.5 py-2.5 rounded-2xl text-xs font-medium text-slate-600 shadow-[0_6px_16px_rgba(148,163,184,0.15)] border border-white/80 z-20 whitespace-normal leading-relaxed text-left"
           >
             {quote}
-            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-white/90 rotate-45 border-r border-b border-white/60"></div>
+            <div className="absolute right-[-4px] top-1/2 -translate-y-1/2 w-2 h-2 bg-white/95 rotate-45 border-t border-r border-white/80"></div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -433,9 +465,9 @@ export function Pet({ outfit, isIdle, onTap }: PetProps) {
 
         {outfit === 'halo' && (
           <motion.div 
-            initial={{ y: -25, opacity: 0 }} 
+            initial={{ y: -10, opacity: 0 }} 
             animate={{ 
-              y: [ -18, -24, -18 ],
+              y: [ -3, -8, -3 ],
               opacity: 1 
             }}
             transition={{
@@ -446,7 +478,7 @@ export function Pet({ outfit, isIdle, onTap }: PetProps) {
               },
               opacity: { duration: 0.3 }
             }}
-            className="absolute -top-7 left-1/2 -translate-x-1/2 w-20 h-10 z-30"
+            className="absolute -top-3 left-1/2 -translate-x-1/2 w-20 h-10 z-30 pointer-events-none"
           >
             {/* Floating Wisdom Halo */}
             <svg viewBox="0 0 120 60" className="w-full h-full filter drop-shadow-[0_0_12px_rgba(253,224,71,0.8)]">
@@ -461,6 +493,252 @@ export function Pet({ outfit, isIdle, onTap }: PetProps) {
                   <stop offset="100%" stopColor="#FCD34D" />
                 </linearGradient>
               </defs>
+            </svg>
+          </motion.div>
+        )}
+
+        {outfit === 'detective' && (
+          <motion.div 
+            initial={{ y: -15, opacity: 0 }} 
+            animate={{ y: 0, opacity: 1 }} 
+            className="absolute -top-3.5 left-1/2 -translate-x-1/2 w-16 h-16 z-30 pointer-events-none"
+          >
+            <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-md">
+              <path d="M 20 65 Q 20 30 50 30 Q 80 30 80 65 Z" fill="#78350F" stroke="#451A03" strokeWidth="2.5" />
+              <path d="M 20 65 Q 10 70 5 62 Q 15 58 20 65" fill="#5F2120" stroke="#451A03" strokeWidth="1.8" />
+              <path d="M 80 65 Q 90 70 95 62 Q 85 58 80 65" fill="#5F2120" stroke="#451A03" strokeWidth="1.8" />
+              <path d="M 50 30 L 50 50" stroke="#EF4444" strokeWidth="2.5" />
+              <path d="M 35 35 Q 40 55 45 65" stroke="#451A03" strokeWidth="1.2" strokeDasharray="3,3" fill="none" opacity="0.6" />
+              <circle cx="50" cy="30" r="3.5" fill="#EF4444" />
+            </svg>
+          </motion.div>
+        )}
+
+        {outfit === 'chef' && (
+          <motion.div 
+            initial={{ y: -18, opacity: 0 }} 
+            animate={{ y: 0, opacity: 1 }} 
+            className="absolute -top-7.5 left-1/2 -translate-x-1/2 w-16 h-16 z-30 pointer-events-none"
+          >
+            <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-md">
+              <path d="M 30 75 C 20 70 15 50 25 40 C 25 25 45 15 55 25 C 65 15 85 25 80 45 C 85 55 75 70 70 75 Z" fill="#FFFFFF" stroke="#CBD5E1" strokeWidth="2.5" />
+              <rect x="30" y="65" width="40" height="12" rx="3.5" fill="#F8FAFC" stroke="#94A3B8" strokeWidth="2.5" />
+              <line x1="38" y1="65" x2="38" y2="77" stroke="#CBD5E1" strokeWidth="1.8" />
+              <line x1="46" y1="65" x2="46" y2="77" stroke="#CBD5E1" strokeWidth="1.8" />
+              <line x1="54" y1="65" x2="54" y2="77" stroke="#CBD5E1" strokeWidth="1.8" />
+              <line x1="62" y1="65" x2="62" y2="77" stroke="#CBD5E1" strokeWidth="1.8" />
+            </svg>
+          </motion.div>
+        )}
+
+        {outfit === 'magic_hat' && (
+          <motion.div 
+            initial={{ y: -20, rotate: -10, opacity: 0 }} 
+            animate={{ y: 0, rotate: 0, opacity: 1 }} 
+            className="absolute -top-7 left-1/2 -translate-x-1/2 w-18 h-18 z-30 pointer-events-none"
+          >
+            <svg viewBox="0 0 100 100" className="w-full h-full drop-shadow-[0_4px_8px_rgba(99,102,241,0.4)]">
+              <path d="M 15 75 Q 50 78 85 75 L 60 15 C 55 10, 48 10, 40 25 Z" fill="#312E81" stroke="#1E1B4B" strokeWidth="2.5" strokeLinejoin="round" />
+              <path d="M 28 65 Q 50 68 72 65 L 73 70 Q 50 73 27 70 Z" fill="#F59E0B" />
+              <polygon points="50,32 52,37 57,37 53,40 55,45 50,42 45,45 47,40 43,37 48,37" fill="#FCD34D" />
+              <polygon points="35,48 37,51 41,51 38,53 39,57 35,55 31,57 32,53 29,51 33,51" fill="#FCD34D" transform="scale(0.8) translate(10, 10)" />
+              <ellipse cx="50" cy="73" rx="42" ry="7" fill="#1E1B4B" stroke="#1E1B4B" strokeWidth="1.2" />
+            </svg>
+          </motion.div>
+        )}
+
+        {outfit === 'pirate' && (
+          <motion.div 
+            initial={{ scale: 0.6, opacity: 0 }} 
+            animate={{ scale: 1, opacity: 1 }} 
+            className="absolute top-9 left-1/2 -translate-x-1/2 w-16 h-8 z-30 pointer-events-none"
+          >
+            <svg viewBox="0 0 100 40" className="w-full h-full">
+              <path d="M 10 5 L 90 22" stroke="#1E293B" strokeWidth="2.8" strokeLinecap="round" />
+              <ellipse cx="34" cy="18" rx="12" ry="10" fill="#0F172A" stroke="#1E293B" strokeWidth="1.8" />
+              <circle cx="34" cy="16" r="3.5" fill="#F1F5F9" />
+              <path d="M 31 21 L 37 21" stroke="#F1F5F9" strokeWidth="1.8" />
+            </svg>
+          </motion.div>
+        )}
+
+        {outfit === 'flower' && (
+          <motion.div 
+            initial={{ scale: 0.5, opacity: 0 }} 
+            animate={{ 
+              scale: 1, 
+              opacity: 1,
+              rotate: [0, -5, 5, -5, 0]
+            }}
+            transition={{
+              rotate: {
+                repeat: Infinity,
+                duration: 3.5,
+                ease: "easeInOut"
+              },
+              scale: { duration: 0.3 }
+            }}
+            className="absolute -top-5.5 left-1/2 -translate-x-1/2 w-12 h-12 z-30 pointer-events-none origin-bottom"
+          >
+            <svg viewBox="0 0 100 100" className="w-full h-full">
+              <path d="M 50 85 Q 50 60, 42 45" fill="none" stroke="#22C55E" strokeWidth="3" strokeLinecap="round" />
+              <circle cx="33" cy="35" r="7" fill="#FB7185" />
+              <circle cx="51" cy="35" r="7" fill="#FB7185" />
+              <circle cx="42" cy="26" r="7" fill="#FB7185" />
+              <circle cx="42" cy="44" r="7" fill="#FB7185" />
+              <circle cx="42" cy="35" r="6.5" fill="#FCD34D" stroke="#F59E0B" strokeWidth="1" />
+              <path d="M 50 65 Q 62 55, 58 70 Z" fill="#4ADE80" stroke="#22C55E" strokeWidth="1" />
+            </svg>
+          </motion.div>
+        )}
+
+        {outfit === 'sunflower' && (
+          <motion.div 
+            initial={{ scale: 0.7, opacity: 0 }} 
+            animate={{ scale: 1, opacity: 1 }} 
+            className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-28 h-28 z-20 pointer-events-none"
+          >
+            <svg viewBox="0 0 200 200" className="w-full h-full drop-shadow-md">
+              <g transform="translate(100, 100)">
+                {[...Array(12)].map((_, i) => (
+                  <path
+                    key={i}
+                    d="M 0 0 C -20 -35, -15 -85, 0 -95 C 15 -85, 20 -35, 0 0"
+                    fill="#FBBF24"
+                    stroke="#D97706"
+                    strokeWidth="2.2"
+                    transform={`rotate(${i * 30})`}
+                  />
+                ))}
+                <circle cx="0" cy="0" r="54" fill="none" stroke="#F59E0B" strokeWidth="5.5" />
+              </g>
+            </svg>
+          </motion.div>
+        )}
+
+        {outfit === 'straw_hat' && (
+          <motion.div 
+            initial={{ y: -15, opacity: 0 }} 
+            animate={{ y: 0, opacity: 1 }} 
+            className="absolute -top-3.5 left-1/2 -translate-x-1/2 w-18 h-18 z-30 pointer-events-none"
+          >
+            <svg viewBox="0 0 120 120" className="w-full h-full drop-shadow-sm">
+              <path d="M 35 70 C 35 40, 85 40, 85 70" fill="#FCD34D" stroke="#D97706" strokeWidth="2.2" />
+              <path d="M 36 64 C 45 58, 75 58, 84 64 L 85 70 C 75 66, 45 66, 35 70 Z" fill="#EF4444" />
+              <ellipse cx="60" cy="72" rx="45" ry="8" fill="#F59E0B" stroke="#D97706" strokeWidth="2.2" />
+            </svg>
+          </motion.div>
+        )}
+
+        {outfit === 'reindeer' && (
+          <motion.div 
+            initial={{ y: -15, opacity: 0 }} 
+            animate={{ y: 0, opacity: 1 }} 
+            className="absolute -top-4.5 left-1/2 -translate-x-1/2 w-22 h-16 z-30 pointer-events-none"
+          >
+            <svg viewBox="0 0 120 80" className="w-full h-full drop-shadow-sm">
+              <path d="M 38 45 L 25 22" stroke="#92400E" strokeWidth="5.5" strokeLinecap="round" />
+              <path d="M 30 33 Q 18 31, 15 35" stroke="#92400E" strokeWidth="4.8" strokeLinecap="round" />
+              <path d="M 27 25 Q 18 15, 22 10" stroke="#92400E" strokeWidth="4" strokeLinecap="round" />
+              <path d="M 82 45 L 95 22" stroke="#92400E" strokeWidth="5.5" strokeLinecap="round" />
+              <path d="M 90 33 Q 102 31, 105 35" stroke="#92400E" strokeWidth="4.8" strokeLinecap="round" />
+              <path d="M 93 25 Q 102 15, 98 10" stroke="#92400E" strokeWidth="4" strokeLinecap="round" />
+            </svg>
+          </motion.div>
+        )}
+
+        {outfit === 'star_glasses' && (
+          <motion.div 
+            initial={{ scale: 0.6, opacity: 0 }} 
+            animate={{ scale: 1, opacity: 1 }} 
+            className="absolute top-8 left-1/2 -translate-x-1/2 w-18 h-10 z-30 pointer-events-none"
+          >
+            <svg viewBox="0 0 100 40" className="w-full h-full">
+              <polygon points="34,8 37,15 45,15 39,20 41,28 34,23 27,28 29,20 23,15 31,15" fill="rgba(251,191,36,0.85)" stroke="#D97706" strokeWidth="1.8" />
+              <polygon points="66,8 69,15 77,15 71,20 73,28 66,23 59,28 61,20 55,15 63,15" fill="rgba(251,191,36,0.85)" stroke="#D97706" strokeWidth="1.8" />
+              <path d="M 43 17 L 57 17" stroke="#D97706" strokeWidth="2.8" />
+            </svg>
+          </motion.div>
+        )}
+
+        {outfit === 'sunglasses' && (
+          <motion.div 
+            initial={{ scale: 0.7, opacity: 0 }} 
+            animate={{ scale: 1, opacity: 1 }} 
+            className="absolute top-[34px] left-1/2 -translate-x-1/2 w-18 h-8 z-30 pointer-events-none"
+          >
+            <svg viewBox="0 0 100 30" className="w-full h-full drop-shadow-sm">
+              <path d="M 20 8 L 46 8 L 42 22 L 24 22 Z" fill="#1E293B" stroke="#0F172A" strokeWidth="1.8" />
+              <path d="M 23 11 L 33 11" stroke="white" strokeWidth="1.5" opacity="0.4" />
+              <path d="M 54 8 L 80 8 L 76 22 L 58 22 Z" fill="#1E293B" stroke="#0F172A" strokeWidth="1.8" />
+              <path d="M 57 11 L 67 11" stroke="white" strokeWidth="1.5" opacity="0.4" />
+              <rect x="44" y="10" width="12" height="3" fill="#1E293B" />
+            </svg>
+          </motion.div>
+        )}
+
+        {outfit === 'ninja' && (
+          <motion.div 
+            initial={{ scale: 0.8, opacity: 0 }} 
+            animate={{ scale: 1, opacity: 1 }} 
+            className="absolute top-7 left-1/2 -translate-x-1/2 w-18 h-7 z-30 pointer-events-none"
+          >
+            <svg viewBox="0 0 100 30" className="w-full h-full">
+              <rect x="10" y="8" width="80" height="9" fill="#DC2626" stroke="#991B1B" strokeWidth="1" />
+              <rect x="35" y="6" width="30" height="13" rx="2" fill="#E2E8F0" stroke="#94A3B8" strokeWidth="1" />
+              <circle cx="41" cy="12.5" r="1.2" fill="#64748B" />
+              <circle cx="59" cy="12.5" r="1.2" fill="#64748B" />
+              <path d="M 46 12.5 L 54 12.5" stroke="#475569" strokeWidth="1.8" />
+              <path d="M 50 9.5 L 50 15.5" stroke="#475569" strokeWidth="1.5" />
+            </svg>
+          </motion.div>
+        )}
+
+        {outfit === 'devil_horns' && (
+          <motion.div 
+            initial={{ y: -15, opacity: 0 }} 
+            animate={{ y: 0, opacity: 1 }} 
+            className="absolute -top-3 left-1/2 -translate-x-1/2 w-20 h-10 z-30 pointer-events-none"
+          >
+            <svg viewBox="0 0 100 50" className="w-full h-full filter drop-shadow-[0_2px_4px_rgba(239,68,68,0.4)]">
+              <path d="M 28 35 C 28 35, 12 28, 16 10 C 22 15, 26 28, 32 32 Z" fill="#EF4444" stroke="#991B1B" strokeWidth="1.8" />
+              <path d="M 72 35 C 72 35, 88 28, 84 10 C 78 15, 74 28, 68 32 Z" fill="#EF4444" stroke="#991B1B" strokeWidth="1.8" />
+            </svg>
+          </motion.div>
+        )}
+
+        {outfit === 'party_hat' && (
+          <motion.div 
+            initial={{ y: -20, rotate: -15, opacity: 0 }} 
+            animate={{ y: 0, rotate: 0, opacity: 1 }} 
+            className="absolute -top-6.5 left-1/2 -translate-x-1/2 w-12 h-14 z-30 pointer-events-none"
+          >
+            <svg viewBox="0 0 80 100" className="w-full h-full drop-shadow-sm">
+              <polygon points="40,15 15,85 65,85" fill="#10B981" stroke="#047857" strokeWidth="1.8" strokeLinejoin="round" />
+              <path d="M 27 75 L 53 75 L 58 85 L 22 85 Z" fill="#FBBF24" />
+              <path d="M 33 55 L 47 55 L 50 65 L 30 65 Z" fill="#EF4444" />
+              <circle cx="40" cy="14" r="5" fill="#EF4444" />
+            </svg>
+          </motion.div>
+        )}
+
+        {outfit === 'propeller' && (
+          <motion.div 
+            initial={{ y: -15, opacity: 0 }} 
+            animate={{ y: 0, opacity: 1 }} 
+            className="absolute -top-6.5 left-1/2 -translate-x-1/2 w-14 h-14 z-30 pointer-events-none"
+          >
+            <svg viewBox="0 0 100 100" className="w-full h-full">
+              <path d="M 30 75 Q 50 45 70 75 Z" fill="#EF4444" stroke="#B91C1C" strokeWidth="2.2" />
+              <rect x="48" y="35" width="4" height="20" fill="#94A3B8" />
+              <motion.g
+                animate={{ rotate: 360 }}
+                transition={{ repeat: Infinity, duration: 1.5, ease: "linear" }}
+                style={{ transformOrigin: "50px 35px" }}
+              >
+                <path d="M 20 32 L 80 38 L 80 32 L 20 38 Z" fill="#FBBF24" stroke="#D97706" strokeWidth="1.2" />
+                <circle cx="50" cy="35" r="4.5" fill="#3B82F6" />
+              </motion.g>
             </svg>
           </motion.div>
         )}

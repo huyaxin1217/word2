@@ -19,8 +19,8 @@ interface ReviewTabProps {
 export function ReviewTab({ outfit, onOpenDressUp, onAddCoins, words, userId, onWordReviewed }: ReviewTabProps) {
   const [queue, setQueue] = useState<Word[]>([]);
   const [showDefinition, setShowDefinition] = useState(false);
-  const [idleTime, setIdleTime] = useState(0);
   const [isGeneratingInfo, setIsGeneratingInfo] = useState(false);
+  const [isEnrichingCurrentWord, setIsEnrichingCurrentWord] = useState(false);
   const [studyMode, setStudyMode] = useState<'flashcard' | 'choice' | 'spelling'>('flashcard');
   const [isModeDropdownOpen, setIsModeDropdownOpen] = useState(false);
 
@@ -40,20 +40,61 @@ export function ReviewTab({ outfit, onOpenDressUp, onAddCoins, words, userId, on
 
   const currentWord = queue[0];
 
+  // Auto-enrich word when encountered if it is marked as pending
   useEffect(() => {
-    if (currentWord && !showDefinition) {
+    if (currentWord && (currentWord.isPending || currentWord.phonetic === '/pending/') && !isEnrichingCurrentWord) {
+      const autoEnrich = async () => {
+        setIsEnrichingCurrentWord(true);
+        try {
+          const res = await fetch('/api/lookup-words', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ words: [currentWord.english] })
+          });
+          if (res.ok) {
+            const data = await res.json();
+            const result = data[0];
+            if (result && result.english) {
+              const updatedWord: Word = {
+                ...currentWord,
+                phonetic: result.phonetic || '/unknown/',
+                definition: result.definition || 'n. 暂无释义',
+                exampleEn: result.exampleEn || 'Standard dictionary sentence.',
+                exampleZh: result.exampleZh || '标准字典释义。',
+                isPending: false
+              };
+              
+              // Update state
+              setQueue(prev => prev.map(w => w.id === currentWord.id ? updatedWord : w));
+              
+              // Cache to global DB
+              await updateWordData(currentWord.id, {
+                phonetic: updatedWord.phonetic,
+                definition: updatedWord.definition,
+                exampleEn: updatedWord.exampleEn,
+                exampleZh: updatedWord.exampleZh,
+                isPending: false
+              });
+
+              // Inform parent
+              onWordReviewed(updatedWord);
+            }
+          }
+        } catch (err) {
+          console.error("Auto enrichment failed:", err);
+        } finally {
+          setIsEnrichingCurrentWord(false);
+        }
+      };
+      autoEnrich();
+    }
+  }, [currentWord?.id, currentWord?.isPending, currentWord?.phonetic, isEnrichingCurrentWord]);
+
+  useEffect(() => {
+    if (currentWord && !showDefinition && !currentWord.isPending && currentWord.phonetic !== '/pending/') {
       playAudio(currentWord.english);
     }
-  }, [currentWord?.id, showDefinition]);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setIdleTime(prev => prev + 1);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const resetIdle = () => setIdleTime(0);
+  }, [currentWord?.id, showDefinition, currentWord?.isPending]);
 
   useEffect(() => {
     if (studyMode === 'choice' && currentWord && words.length > 0) {
@@ -96,7 +137,6 @@ export function ReviewTab({ outfit, onOpenDressUp, onAddCoins, words, userId, on
     e.stopPropagation();
     if (!currentWord || isGeneratingInfo) return;
     setIsGeneratingInfo(true);
-    resetIdle();
     
     try {
       const res = await fetch('/api/generate-example', {
@@ -122,7 +162,7 @@ export function ReviewTab({ outfit, onOpenDressUp, onAddCoins, words, userId, on
   };
 
   const handleAction = async (action: 'forgot' | 'vague' | 'know') => {
-    resetIdle();
+    
     
     if (userId && currentWord) {
       const prevFam = currentWord.progress?.familiarity || 0;
@@ -149,7 +189,7 @@ export function ReviewTab({ outfit, onOpenDressUp, onAddCoins, words, userId, on
   if (!currentWord) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-slate-500 font-medium">今天的复习词汇已经复习完啦！</p>
+        <p className="text-slate-500 font-medium">今天的新词已经学完啦！</p>
       </div>
     );
   }
@@ -161,11 +201,11 @@ export function ReviewTab({ outfit, onOpenDressUp, onAddCoins, words, userId, on
       exit={{ opacity: 0, y: -10 }}
       transition={{ duration: 0.3 }}
       className="flex flex-col h-full px-6"
-      onClick={resetIdle}
+      
     >
       <div className="flex items-center justify-between mb-2 mt-4">
         <div className="flex items-center space-x-3">
-          <h2 className="text-2xl font-bold text-slate-800 tracking-tight">今日复习</h2>
+          <h2 className="text-2xl font-bold text-slate-800 tracking-tight">今日新词</h2>
           <div className="relative z-30">
             <button 
               onClick={() => setIsModeDropdownOpen(!isModeDropdownOpen)}
@@ -243,10 +283,19 @@ export function ReviewTab({ outfit, onOpenDressUp, onAddCoins, words, userId, on
           className="flex-1 flex flex-col min-h-0"
         >
           <div 
-            onClick={() => { if (studyMode === 'flashcard') { setShowDefinition(true); resetIdle(); } }}
-            className={`flex-1 bg-white/40 backdrop-blur-xl rounded-[2rem] p-6 sm:p-8 shadow-[0_8px_32px_rgba(31,38,135,0.05)] border border-white/60 flex flex-col items-center justify-center relative overflow-hidden group ${studyMode === 'flashcard' ? 'cursor-pointer' : ''}`}
+            onClick={() => { if (studyMode === 'flashcard' && !isEnrichingCurrentWord) { setShowDefinition(true);  } }}
+            className={`flex-1 bg-white/40 backdrop-blur-xl rounded-[2rem] p-6 sm:p-8 shadow-[0_8px_32px_rgba(31,38,135,0.05)] border border-white/60 flex flex-col items-center justify-center relative overflow-hidden group ${studyMode === 'flashcard' && !isEnrichingCurrentWord ? 'cursor-pointer' : ''}`}
           >
-            {studyMode === 'flashcard' && (
+            {isEnrichingCurrentWord ? (
+              <div className="flex flex-col items-center justify-center space-y-4 py-8 text-center">
+                <Loader2 className="w-10 h-10 text-teal-600 animate-spin" />
+                <h3 className="text-xl font-bold text-slate-800 tracking-wide">{currentWord.english}</h3>
+                <p className="text-sm font-semibold text-slate-500 max-w-xs leading-relaxed">AI 正在为您即时释义、精校发音，并定制精美例句...</p>
+                <div className="bg-teal-50 text-teal-600 text-[10px] font-bold px-3 py-1.5 rounded-full border border-teal-100 flex items-center space-x-1 mt-2 animate-pulse">
+                  <span>首次触发 AI 解析中</span>
+                </div>
+              </div>
+            ) : studyMode === 'flashcard' && (
               <>
                 <div className="flex items-center justify-center space-x-3 mb-3">
                   <h2 className="text-4xl font-bold text-slate-800 tracking-wide text-center break-words">{currentWord.english}</h2>
@@ -310,21 +359,29 @@ export function ReviewTab({ outfit, onOpenDressUp, onAddCoins, words, userId, on
                 <p className="text-teal-600/70 font-mono text-sm mb-8 text-center">{currentWord.phonetic}</p>
                 
                 <div className="w-full space-y-3">
-                  {choiceOptions.map((opt, i) => (
-                    <button
-                      key={i}
-                      onClick={(e) => { e.stopPropagation(); handleChoiceSelect(opt); }}
-                      className={`w-full text-left p-4 rounded-xl border text-sm transition-all ${
-                        choiceStatus[opt] === 'correct' 
-                          ? 'bg-emerald-50 border-emerald-300 text-emerald-800' 
-                          : choiceStatus[opt] === 'wrong'
-                            ? 'bg-rose-50 border-rose-300 text-rose-800'
-                            : 'bg-white/60 border-white hover:bg-white hover:border-teal-200 text-slate-700'
-                      }`}
-                    >
-                      {opt}
-                    </button>
-                  ))}
+                  {choiceOptions.map((opt, i) => {
+                    const originalWord = words.find(w => w.definition === opt)?.english;
+                    return (
+                      <button
+                        key={i}
+                        onClick={(e) => { e.stopPropagation(); handleChoiceSelect(opt); }}
+                        className={`w-full text-left p-4 rounded-xl border text-sm transition-all flex flex-col justify-center ${
+                          choiceStatus[opt] === 'correct' 
+                            ? 'bg-emerald-50 border-emerald-300 text-emerald-800 shadow-sm' 
+                            : choiceStatus[opt] === 'wrong'
+                              ? 'bg-rose-50 border-rose-300 text-rose-800 shadow-sm'
+                              : 'bg-white/60 border-white hover:bg-white hover:border-teal-200 text-slate-700'
+                        }`}
+                      >
+                        <span className="font-medium">{opt}</span>
+                        {choiceStatus[opt] === 'wrong' && originalWord && (
+                          <span className="text-xs text-rose-500 mt-1.5 font-bold flex items-center bg-rose-100/50 px-2.5 py-1 rounded-lg border border-rose-200 w-fit">
+                            ⚠️ 这是单词 "{originalWord}" 的释义
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -382,19 +439,19 @@ export function ReviewTab({ outfit, onOpenDressUp, onAddCoins, words, userId, on
         <div className="mt-6 flex justify-between space-x-4 mb-4">
           <ActionButton 
             label="忘记" 
-            disabled={!showDefinition} 
+            disabled={!showDefinition || isEnrichingCurrentWord} 
             onClick={() => handleAction('forgot')} 
             variant="danger" 
           />
           <ActionButton 
             label="模糊" 
-            disabled={!showDefinition} 
+            disabled={!showDefinition || isEnrichingCurrentWord} 
             onClick={() => handleAction('vague')} 
             variant="warning" 
           />
           <ActionButton 
             label="认识" 
-            disabled={!showDefinition} 
+            disabled={!showDefinition || isEnrichingCurrentWord} 
             onClick={() => handleAction('know')} 
             variant="success" 
           />
@@ -409,7 +466,7 @@ export function ReviewTab({ outfit, onOpenDressUp, onAddCoins, words, userId, on
         >
           <Shirt className="w-5 h-5" />
         </button>
-        <Pet outfit={outfit} isIdle={idleTime > 10} onTap={() => resetIdle()} />
+        <Pet outfit={outfit} />
       </div>
     </motion.div>
   );

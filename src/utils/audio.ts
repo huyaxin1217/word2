@@ -20,7 +20,7 @@ if (typeof window !== 'undefined' && window.speechSynthesis) {
 }
 
 export const unlockSpeech = () => {
-  if (isUnlocked || typeof window === 'undefined' || !window.speechSynthesis) return;
+  if (typeof window === 'undefined' || !window.speechSynthesis) return;
   try {
     const utterance = new SpeechSynthesisUtterance(' ');
     utterance.volume = 0;
@@ -28,6 +28,9 @@ export const unlockSpeech = () => {
     window.speechSynthesis.speak(utterance);
     isUnlocked = true;
     console.log('SpeechSynthesis unlocked successfully on user interaction.');
+    
+    // Warm up the voices
+    voicesCache = window.speechSynthesis.getVoices() || [];
   } catch (e) {
     console.warn('Failed to unlock SpeechSynthesis:', e);
   }
@@ -35,24 +38,31 @@ export const unlockSpeech = () => {
 
 // Find the best English voice matching BCP-47 tags and high-quality keywords
 const getBestEnglishVoice = (): SpeechSynthesisVoice | null => {
-  const currentVoices = voicesCache.length > 0 
-    ? voicesCache 
-    : (typeof window !== 'undefined' && window.speechSynthesis ? window.speechSynthesis.getVoices() : []);
+  if (typeof window === 'undefined' || !window.speechSynthesis) return null;
   
-  if (!currentVoices || currentVoices.length === 0) return null;
+  // ALWAYS retrieve the most updated voice list from the browser dynamically
+  const currentVoices = window.speechSynthesis.getVoices() || [];
+  const voicesToSearch = currentVoices.length > 0 ? currentVoices : voicesCache;
+  
+  if (!voicesToSearch || voicesToSearch.length === 0) return null;
 
   // Filter to keep only English voices
-  const enVoices = currentVoices.filter(v => v.lang.toLowerCase().startsWith('en'));
+  const enVoices = voicesToSearch.filter(v => {
+    const lang = v.lang.toLowerCase();
+    return lang.startsWith('en') || lang.startsWith('eng');
+  });
+  
   if (enVoices.length === 0) return null;
 
   // Search preferences:
   // 1. Premium/Natural sounding English voices (Google, Siri, Samantha, Microsoft)
-  const preferredKeywords = ['google', 'siri', 'samantha', 'premium', 'natural', 'microsoft', 'daniel', 'karen'];
+  const preferredKeywords = ['google', 'siri', 'samantha', 'premium', 'natural', 'microsoft', 'daniel', 'karen', 'apple'];
   for (const keyword of preferredKeywords) {
-    const found = enVoices.find(v => 
-      v.name.toLowerCase().includes(keyword) && 
-      (v.lang.toLowerCase().includes('us') || v.lang.toLowerCase().includes('gb'))
-    );
+    const found = enVoices.find(v => {
+      const name = v.name.toLowerCase();
+      const lang = v.lang.toLowerCase();
+      return name.includes(keyword) && (lang.includes('us') || lang.includes('gb') || lang.includes('en'));
+    });
     if (found) return found;
   }
 
@@ -73,7 +83,13 @@ export const playLocalTTS = (text: string) => {
   
   try {
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
+    
+    // Capitalize the first letter of the word, which encourages local TTS engines
+    // to pronounce the whole word instead of spelling out single letters
+    const formattedText = text.trim();
+    const capitalizedText = formattedText.charAt(0).toUpperCase() + formattedText.slice(1).toLowerCase();
+    
+    const utterance = new SpeechSynthesisUtterance(capitalizedText);
     utterance.lang = 'en-US';
     utterance.rate = 0.85;
     utterance.pitch = 1.0;
@@ -82,6 +98,9 @@ export const playLocalTTS = (text: string) => {
     if (bestVoice) {
       utterance.voice = bestVoice;
       utterance.lang = bestVoice.lang;
+      console.log(`Using matched English voice: ${bestVoice.name} (${bestVoice.lang}) for text: ${capitalizedText}`);
+    } else {
+      console.warn('No English voice found in browser. Falling back to system default.', capitalizedText);
     }
 
     window.speechSynthesis.speak(utterance);
@@ -92,6 +111,7 @@ export const playLocalTTS = (text: string) => {
 
 export const playAudio = (text: string) => {
   if (!text) return;
+  const cleanText = text.trim();
   
   // Try high-quality standard dictionary voice library (NetEase Youdao US Accent)
   try {
@@ -100,17 +120,31 @@ export const playAudio = (text: string) => {
       activeAudio = null;
     }
 
-    const audioUrl = `https://dict.youdao.com/dictvoice?type=2&audio=${encodeURIComponent(text.trim())}`;
+    const audioUrl = `https://dict.youdao.com/dictvoice?type=2&audio=${encodeURIComponent(cleanText)}`;
     const audio = new Audio(audioUrl);
     activeAudio = audio;
 
     audio.play().catch(err => {
-      console.warn('Standard dictionary voice playing was interrupted or failed, falling back to local TTS:', err);
-      playLocalTTS(text);
+      console.warn('Youdao standard dictionary voice failed or blocked, trying Google Translate fallback:', err);
+      
+      // Fallback 1: Google Translate TTS (highly stable, bypasses Youdao blocks)
+      try {
+        const googleTtsUrl = `https://translate.google.com/translate_tts?ie=UTF-8&tl=en&client=tw-ob&q=${encodeURIComponent(cleanText)}`;
+        const googleAudio = new Audio(googleTtsUrl);
+        activeAudio = googleAudio;
+        
+        googleAudio.play().catch(gErr => {
+          console.warn('Google Translate TTS failed or blocked, falling back to local TTS:', gErr);
+          playLocalTTS(cleanText);
+        });
+      } catch (e2) {
+        console.warn('Google Translate TTS setup failed, falling back to local TTS:', e2);
+        playLocalTTS(cleanText);
+      }
     });
   } catch (e) {
     console.warn('Failed to load standard online dictionary voice, falling back to local TTS:', e);
-    playLocalTTS(text);
+    playLocalTTS(cleanText);
   }
 };
 

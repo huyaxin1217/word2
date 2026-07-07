@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { MainApp } from './components/MainApp';
-import { AuthScreen } from './components/AuthScreen';
+import { AuthScreen, EmailVerificationScreen } from './components/AuthScreen';
 import { auth } from './firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { unlockSpeech } from './utils/audio';
@@ -41,7 +41,11 @@ export default function App() {
             <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
           </div>
         ) : user ? (
-          <MainApp user={user} />
+          (!user.emailVerified && user.metadata.creationTime === user.metadata.lastSignInTime) ? (
+            <EmailVerificationScreen user={user} />
+          ) : (
+            <MainApp user={user} />
+          )
         ) : (
           <AuthScreen />
         )}

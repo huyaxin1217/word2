@@ -78,6 +78,20 @@ export function PetDressUpModal({
     { id: 'scarf', name: '温暖围巾', emoji: '🧣', price: 80, desc: '软绵绵的红色毛线围巾，在自习室倍感温馨' },
     { id: 'bow', name: '优雅领结', emoji: '🎀', price: 120, desc: '精致的丝绸小领结，让学习也充满仪式感' },
     { id: 'halo', name: '智慧光环', emoji: '👼', price: 400, desc: '飘浮的金色天使光环，照亮所有的未知与迷茫' },
+    { id: 'detective', name: '侦探礼帽', emoji: '🕵️‍♂️', price: 180, desc: '化身福尔摩斯，不放过任何一个生词的蛛丝马迹' },
+    { id: 'chef', name: '厨神高帽', emoji: '👨‍🍳', price: 130, desc: '烹饪出美味的“知识大餐”，脑洞大开' },
+    { id: 'magic_hat', name: '巫师魔帽', emoji: '🧙‍♂️', price: 260, desc: '蕴含古老咒语的魔法帽，背词效率瞬间翻倍' },
+    { id: 'pirate', name: '传奇眼罩', emoji: '🏴‍☠️', price: 110, desc: '独眼海盗的神秘眼罩，征服词汇的星辰大海' },
+    { id: 'flower', name: '萌萌小花', emoji: '🌸', price: 60, desc: '头顶开出的一朵七彩小花，心情今天也是美美哒' },
+    { id: 'sunflower', name: '向日葵头套', emoji: '🌻', price: 220, desc: '永远面向阳光与希望，给你满满的学习正能量' },
+    { id: 'straw_hat', name: '遮阳草帽', emoji: '👒', price: 90, desc: '夏日清凉的手工编织草帽，向着自由出发' },
+    { id: 'reindeer', name: '圣诞鹿角', emoji: '🦌', price: 160, desc: '红彤彤的圣诞鹿角，带来冬日的温暖与好运' },
+    { id: 'star_glasses', name: '璀璨星镜', emoji: '⭐️', price: 140, desc: '五角星造型炫彩墨镜，你就是自习室最靓的仔' },
+    { id: 'sunglasses', name: '酷黑墨镜', emoji: '🕶️', price: 100, desc: '超酷防辐射黑超墨镜，冷酷无情背词机器' },
+    { id: 'ninja', name: '忍者额带', emoji: '🥷', price: 150, desc: '写有“必胜”的修行额带，不达目的誓不罢休' },
+    { id: 'devil_horns', name: '俏皮恶魔角', emoji: '😈', price: 170, desc: '红色的恶魔小犄角，古灵精怪又带点小傲娇' },
+    { id: 'party_hat', name: '狂欢派对帽', emoji: '🎉', price: 70, desc: '五彩斑斓的小纸帽，庆祝每一个单词被牢记' },
+    { id: 'propeller', name: '飞行竹蜻蜓', emoji: '🚁', price: 240, desc: '顶部的竹蜻蜓轻快旋转，带你飞跃词汇难关' },
   ];
 
   const handleBuy = (id: PetOutfit, price: number) => {
@@ -108,7 +122,7 @@ export function PetDressUpModal({
         <div className="w-32 h-32 bg-white/40 rounded-3xl border border-white/60 flex items-center justify-center mb-6 shadow-sm relative overflow-hidden backdrop-blur-md">
            <div className="absolute inset-0 bg-gradient-to-br from-teal-50/50 to-emerald-50/50" />
            <div className="scale-150 relative z-10">
-             <Pet outfit={currentOutfit} isIdle={false} onTap={() => {}} />
+             <Pet outfit={currentOutfit} isIdle={false} onTap={() => {}} hideSpeechBubble={true} />
            </div>
         </div>
 
